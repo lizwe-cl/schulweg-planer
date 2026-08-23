@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Schulweg-Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #EEF2ED;
+    --bg-card: #FBFCFA;
+    --ink: #1F2A24;
+    --ink-soft: #5B6960;
+    --line: #D9E0D6;
+    --morning: #E8944F;
+    --morning-soft: #FBE6D3;
+    --afternoon: #5A7DA3;
+    --afternoon-soft: #DCE6F0;
+    --free-border: #C6CFC1;
+    --danger: #C25450;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: 60px;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 0 18px; }
+
+  header.top { padding: 28px 18px 20px; text-align: left; }
+  header.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 28px;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .sub { font-size: 13px; color: var(--ink-soft); margin-top: 4px; }
+  .me-chip {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 12px 6px 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .avatar {
+    width: 26px; height: 26px; border-radius: 999px;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-size: 11px; font-weight: 700;
+    font-family: 'IBM Plex Mono', monospace;
+    flex-shrink: 0;
+  }
+
+  .week-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin: 28px 0 10px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .week-label::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+  .day-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .day-card.past { opacity: 0.55; }
+  .day-head { padding: 12px 16px 4px; display: flex; align-items: baseline; gap: 8px; }
+  .day-head .dow { font-family: 'Fraunces', serif; font-weight: 600; font-size: 16px; }
+  .day-head .date { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-soft); }
+  .day-head .today-flag {
+    margin-left: auto; font-size: 10px; font-family: 'IBM Plex Mono', monospace;
+    color: var(--morning); border: 1px solid var(--morning); border-radius: 999px; padding: 2px 8px;
+  }
+
+  .slots { display: flex; }
+  .slot { flex: 1; padding: 10px 14px 14px; position: relative; }
+  .slot + .slot { border-left: 1px solid var(--line); }
+  .slot-label {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+    margin-bottom: 8px;
+  }
+  .slot-label.am { color: var(--morning); }
+  .slot-label.pm { color: var(--afternoon); }
+  .arc { width: 12px; height: 12px; flex-shrink: 0; }
+
+  .assign-btn {
+    width: 100%;
+    display: flex; align-items: center; gap: 8px;
+    background: transparent;
+    border: 1.5px dashed var(--free-border);
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-soft);
+    cursor: pointer;
+    text-align: left;
+  }
+  .assign-btn.filled { border-style: solid; background: var(--bg); }
+  .assign-btn .avatar { width: 22px; height: 22px; font-size: 10px; }
+  .assign-btn.filled.am { border-color: var(--morning-soft); }
+  .assign-btn.filled.pm { border-color: var(--afternoon-soft); }
+  .assign-btn:active { transform: scale(0.98); }
+  .mode-icon { font-size: 14px; margin-left: auto; }
+  .assign-btn .name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Modal */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(31,42,36,0.45);
+    display: none; align-items: flex-end; justify-content: center;
+    z-index: 50;
+  }
+  .overlay.show { display: flex; }
+  .sheet {
+    background: var(--bg-card);
+    width: 100%; max-width: 480px;
+    border-radius: 20px 20px 0 0;
+    padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+    animation: up 0.18s ease-out;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+  @keyframes up { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .sheet h3 { font-family: 'Fraunces', serif; margin: 0 0 4px; font-size: 18px; }
+  .sheet .meta { font-size: 12px; color: var(--ink-soft); margin-bottom: 16px; }
+
+  .person-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 4px 8px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .person-row .avatar { width: 30px; height: 30px; font-size: 12px; }
+  .person-row .name-flex { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .mode-btn {
+    border: 1.5px solid var(--line);
+    background: var(--bg);
+    border-radius: 999px;
+    width: 36px; height: 36px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .mode-btn:active { transform: scale(0.92); }
+
+  .del-btn {
+    border: none; background: none; color: var(--ink-soft);
+    font-size: 16px; cursor: pointer; padding: 6px 8px; flex-shrink: 0;
+    border-radius: 8px;
+  }
+  .del-btn.confirming { color: white; background: var(--danger); font-size: 11px; font-weight: 700; padding: 6px 10px; }
+
+  .select-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 8px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 14px;
+  }
+  .select-row:active { background: var(--bg); }
+
+  .clear-row { color: var(--danger); font-weight: 600; font-size: 13px; padding: 10px 8px; cursor: pointer; }
+  .add-person { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .add-person input {
+    flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+    font-family: 'Inter', sans-serif; font-size: 13px;
+  }
+  .add-person button {
+    border: none; background: var(--ink); color: white; border-radius: 8px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .add-error {
+    font-size: 12px; color: var(--danger); margin-top: 6px; display: none;
+  }
+  .add-error.show { display: block; }
+  .close-sheet { display: block; margin: 14px auto 0; background: none; border: none; color: var(--ink-soft); font-size: 13px; cursor: pointer; }
+
+  .empty-hint { text-align: center; padding: 60px 20px; color: var(--ink-soft); font-size: 14px; }
+  .loading { text-align: center; padding: 60px 20px; color: var(--ink-soft); font-size: 13px; font-family: 'IBM Plex Mono', monospace; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div>
+      <h1>Schulweg-Plan</h1>
+      <div class="sub">Wer bringt, wer holt ab</div>
+    </div>
+    <div class="me-chip" id="meChip" onclick="openWhoAmI()">
+      <div class="avatar" id="meAvatar" style="background:#999">?</div>
+      <span id="meLabel">Wer bist du?</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap" id="content">
+  <div class="loading">Lade Plan …</div>
+</div>
+
+<!-- Assign sheet -->
+<div class="overlay" id="assignOverlay" onclick="if(event.target===this) closeAssign()">
+  <div class="sheet">
+    <h3 id="assignTitle">Zuweisen</h3>
+    <div class="meta" id="assignMeta"></div>
+    <div id="personList"></div>
+    <div class="clear-row" onclick="assignPerson(null, null)">Freigeben</div>
+    <div class="add-person">
+      <input id="newPersonInput" placeholder="Neue Person hinzufügen…" maxlength="20">
+      <button onclick="addPerson()">OK</button>
+    </div>
+    <div class="add-error" id="assignAddError">Diesen Namen gibt es schon.</div>
+    <button class="close-sheet" onclick="closeAssign()">Schließen</button>
+  </div>
+</div>
+
+<!-- Who am I / manage people sheet -->
+<div class="overlay" id="whoOverlay" onclick="if(event.target===this) closeWhoAmI()">
+  <div class="sheet">
+    <h3>Personen</h3>
+    <div class="meta">Tippe auf einen Namen, um dich als diese Person einzutragen. Mit ✕ kannst du eine Person entfernen.</div>
+    <div id="whoList"></div>
+    <div class="add-person">
+      <input id="whoNewInput" placeholder="Neue Person hinzufügen…" maxlength="20">
+      <button onclick="addPersonAsMe()">OK</button>
+    </div>
+    <div class="add-error" id="whoAddError">Diesen Namen gibt es schon.</div>
+    <button class="close-sheet" onclick="closeWhoAmI()">Schließen</button>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+/* ======================================================================
+   FIREBASE-KONFIGURATION — HIER EINTRAGEN
+   Diese Werte bekommst du in der Firebase-Konsole unter:
+   Projekteinstellungen (Zahnrad) > Allgemein > "Meine Apps" > Web-App
+   Siehe Anleitung, die Claude dir dazu gegeben hat.
+   ====================================================================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyDG_f6Tfa2kpmpaPG2hT-yxfZRqVH0RHbI",
+  authDomain: "schulweg-planer.firebaseapp.com",
+  databaseURL: "https://schulweg-planer-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "schulweg-planer",
+  storageBucket: "schulweg-planer.firebasestorage.app",
+  messagingSenderId: "861805235960",
+  appId: "1:861805235960:web:40847f87aa1ce182d7750d"
+};
+/* ====================================================================== */
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+const COLORS = ['#E1667C', '#4C9A8B', '#7C6FA6', '#D9A441', '#4C7EA3', '#9A5B4C'];
+const DOW = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+const MONTHS = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+const MODE_ICON = { car: '🚗', walk: '🚶' };
+
+let people = [];          // [{id, name}]
+let plans = {};            // dateStr -> {morning:{personId,mode}|null, afternoon:{...}|null}
+let myId = localStorage.getItem('schulweg-my-id') || null;
+let assignCtx = null;      // {dateStr, slot}
+let confirmDeleteId = null;
+let confirmDeleteTimeout = null;
+
+function pad(n){ return n < 10 ? '0'+n : ''+n; }
+function toDateStr(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+function fromDateStr(s){ const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); }
+function todayStart(){ const t = new Date(); t.setHours(0,0,0,0); return t; }
+
+function colorFor(id){
+  let hash = 0;
+  for (const ch of id) hash = (hash*31 + ch.charCodeAt(0)) % COLORS.length;
+  return COLORS[Math.abs(hash) % COLORS.length];
+}
+function initials(name){ return name.trim().split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
+function personById(id){ return people.find(p=>p.id===id); }
+function nameTaken(name, excludeId){
+  const n = name.trim().toLowerCase();
+  return people.some(p => p.id !== excludeId && p.name.trim().toLowerCase() === n);
+}
+
+// --- Firebase: live listeners ---
+function initData(){
+  db.ref('people').on('value', snap => {
+    const val = snap.val() || {};
+    people = Object.keys(val).map(id => ({id, name: val[id].name}));
+    if (myId && !personById(myId)) { myId = null; localStorage.removeItem('schulweg-my-id'); }
+    render();
+    if (document.getElementById('whoOverlay').classList.contains('show')) renderWhoList();
+    if (document.getElementById('assignOverlay').classList.contains('show')) renderPersonList();
+  });
+  db.ref('plans').on('value', snap => {
+    plans = snap.val() || {};
+    render();
+  });
+  cleanupPastPlans();
+}
+
+async function cleanupPastPlans(){
+  try {
+    const snap = await db.ref('plans').once('value');
+    const val = snap.val() || {};
+    const cutoff = todayStart();
+    const updates = {};
+    for (const dateStr of Object.keys(val)) {
+      if (fromDateStr(dateStr) < cutoff) updates[dateStr] = null;
+    }
+    if (Object.keys(updates).length) await db.ref('plans').update(updates);
+  } catch(e){ console.error('Cleanup fehlgeschlagen', e); }
+}
+
+function buildDayList(){
+  const start = new Date(todayStart());
+  const end = new Date(todayStart()); end.setDate(end.getDate()+14);
+  const days = [];
+  const cur = new Date(start);
+  while (cur <= end) {
+    const dow = cur.getDay();
+    if (dow !== 0 && dow !== 6) days.push(new Date(cur));
+    cur.setDate(cur.getDate()+1);
+  }
+  return days;
+}
+
+function weekLabel(d, todayD){
+  const mondayOfDay = new Date(d); mondayOfDay.setDate(d.getDate() - ((d.getDay()+6)%7));
+  const mondayOfToday = new Date(todayD); mondayOfToday.setDate(todayD.getDate() - ((todayD.getDay()+6)%7));
+  const weekDiff = Math.round((mondayOfDay - mondayOfToday) / (7*86400000));
+  if (weekDiff === 0) return 'Diese Woche';
+  if (weekDiff === 1) return 'Nächste Woche';
+  if (weekDiff === 2) return 'Übernächste Woche';
+  return 'In '+weekDiff+' Wochen';
+}
+
+function arcSvg(color){
+  return `<svg class="arc" viewBox="0 0 24 24" fill="none"><path d="M4 16C4 9.4 8.5 4 14 4s10 5.4 10 12" stroke="${color}" stroke-width="2.5" stroke-linecap="round" transform="translate(-2,2) scale(0.8)"/></svg>`;
+}
+
+function slotButtonHtml(dateStr, slot){
+  const p = plans[dateStr] || {};
+  const entry = p[slot];
+  const cls = slot === 'morning' ? 'am' : 'pm';
+  if (entry && entry.personId && personById(entry.personId)) {
+    const person = personById(entry.personId);
+    const icon = MODE_ICON[entry.mode] || '';
+    return `<button class="assign-btn filled ${cls}" onclick="openAssign('${dateStr}','${slot}')">
+      <div class="avatar" style="background:${colorFor(person.id)}">${initials(person.name)}</div>
+      <span class="name-text">${person.name}</span>
+      <span class="mode-icon">${icon}</span>
+    </button>`;
+  }
+  return `<button class="assign-btn ${cls}" onclick="openAssign('${dateStr}','${slot}')">＋ Zuweisen</button>`;
+}
+
+function render(){
+  const content = document.getElementById('content');
+  const todayD = todayStart();
+  const days = buildDayList();
+
+  if (people.length === 0) {
+    content.innerHTML = `<div class="empty-hint">Noch niemand eingetragen.<br>Tippe oben rechts auf „Wer bist du?", um die erste Person hinzuzufügen.</div>`;
+    updateMeChip();
+    return;
+  }
+
+  let html = '';
+  let lastLabel = null;
+  for (const d of days) {
+    const label = weekLabel(d, todayD);
+    if (label !== lastLabel) { html += `<div class="week-label">${label}</div>`; lastLabel = label; }
+    const dateStr = toDateStr(d);
+    const isToday = dateStr === toDateStr(todayD);
+    html += `<div class="day-card">
+      <div class="day-head">
+        <span class="dow">${DOW[d.getDay()]}</span>
+        <span class="date">${pad(d.getDate())}. ${MONTHS[d.getMonth()]}</span>
+        ${isToday ? '<span class="today-flag">HEUTE</span>' : ''}
+      </div>
+      <div class="slots">
+        <div class="slot">
+          <div class="slot-label am">${arcSvg('#E8944F')} Morgens · Hinbringen</div>
+          ${slotButtonHtml(dateStr, 'morning')}
+        </div>
+        <div class="slot">
+          <div class="slot-label pm">${arcSvg('#5A7DA3')} Nachmittags · Abholen</div>
+          ${slotButtonHtml(dateStr, 'afternoon')}
+        </div>
+      </div>
+    </div>`;
+  }
+  content.innerHTML = html;
+  updateMeChip();
+}
+
+function updateMeChip(){
+  const avatar = document.getElementById('meAvatar');
+  const label = document.getElementById('meLabel');
+  const person = myId ? personById(myId) : null;
+  if (person) {
+    avatar.style.background = colorFor(person.id);
+    avatar.textContent = initials(person.name);
+    label.textContent = person.name;
+  } else {
+    avatar.style.background = '#999';
+    avatar.textContent = '?';
+    label.textContent = 'Wer bist du?';
+  }
+}
+
+// --- Assign sheet ---
+function openAssign(dateStr, slot){
+  assignCtx = {dateStr, slot};
+  confirmDeleteId = null;
+  const d = fromDateStr(dateStr);
+  document.getElementById('assignTitle').textContent = (slot==='morning' ? 'Hinbringen' : 'Abholen');
+  document.getElementById('assignMeta').textContent = DOW[d.getDay()] + ', ' + pad(d.getDate()) + '. ' + MONTHS[d.getMonth()];
+  document.getElementById('assignAddError').classList.remove('show');
+  renderPersonList();
+  document.getElementById('assignOverlay').classList.add('show');
+}
+function renderPersonList(){
+  const list = document.getElementById('personList');
+  list.innerHTML = people.map(p => `
+    <div class="person-row">
+      <div class="avatar" style="background:${colorFor(p.id)}">${initials(p.name)}</div>
+      <span class="name-flex">${p.name}${p.id===myId ? ' (du)' : ''}</span>
+      <button class="mode-btn" title="Zu Fuß" onclick="assignPerson('${p.id}','walk')">🚶</button>
+      <button class="mode-btn" title="Auto" onclick="assignPerson('${p.id}','car')">🚗</button>
+    </div>`).join('');
+}
+function closeAssign(){
+  document.getElementById('assignOverlay').classList.remove('show');
+  document.getElementById('newPersonInput').value = '';
+  assignCtx = null;
+}
+async function assignPerson(personId, mode){
+  if (!assignCtx) return;
+  const {dateStr, slot} = assignCtx;
+  closeAssign();
+  if (!personId) {
+    await db.ref(`plans/${dateStr}/${slot}`).remove();
+  } else {
+    await db.ref(`plans/${dateStr}/${slot}`).set({personId, mode});
+  }
+}
+async function addPerson(){
+  const input = document.getElementById('newPersonInput');
+  const err = document.getElementById('assignAddError');
+  const name = input.value.trim();
+  if (!name) return;
+  if (nameTaken(name)) { err.classList.add('show'); return; }
+  err.classList.remove('show');
+  const id = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+  await db.ref('people/'+id).set({name});
+  input.value = '';
+}
+
+// --- Delete person (shared for both sheets) ---
+function deletePersonBtnHtml(id, refreshFn){
+  const confirming = confirmDeleteId === id;
+  return `<button class="del-btn ${confirming?'confirming':''}" onclick="event.stopPropagation(); handleDeleteClick('${id}', '${refreshFn}')">${confirming ? 'Löschen?' : '✕'}</button>`;
+}
+function handleDeleteClick(id, refreshFn){
+  if (confirmDeleteTimeout) clearTimeout(confirmDeleteTimeout);
+  if (confirmDeleteId === id) { deletePerson(id, refreshFn); return; }
+  confirmDeleteId = id;
+  refreshCurrentSheet(refreshFn);
+  confirmDeleteTimeout = setTimeout(() => { confirmDeleteId = null; refreshCurrentSheet(refreshFn); }, 2500);
+}
+function refreshCurrentSheet(refreshFn){
+  if (refreshFn === 'who') renderWhoList(); else renderPersonList();
+}
+async function deletePerson(id, refreshFn){
+  confirmDeleteId = null;
+  await db.ref('people/'+id).remove();
+
+  const snap = await db.ref('plans').once('value');
+  const val = snap.val() || {};
+  const updates = {};
+  for (const dateStr of Object.keys(val)) {
+    const p = val[dateStr];
+    if (p && p.morning && p.morning.personId === id) updates[dateStr+'/morning'] = null;
+    if (p && p.afternoon && p.afternoon.personId === id) updates[dateStr+'/afternoon'] = null;
+  }
+  if (Object.keys(updates).length) await db.ref('plans').update(updates);
+
+  if (myId === id) { myId = null; localStorage.removeItem('schulweg-my-id'); }
+  refreshCurrentSheet(refreshFn);
+}
+
+// --- Who am I / manage people sheet ---
+function openWhoAmI(){
+  confirmDeleteId = null;
+  document.getElementById('whoAddError').classList.remove('show');
+  renderWhoList();
+  document.getElementById('whoOverlay').classList.add('show');
+}
+function renderWhoList(){
+  const list = document.getElementById('whoList');
+  if (people.length === 0) {
+    list.innerHTML = `<div class="meta">Noch keine Personen. Füge dich unten hinzu.</div>`;
+    return;
+  }
+  list.innerHTML = people.map(p => `
+    <div class="select-row" onclick="setMe('${p.id}')">
+      <div class="avatar" style="background:${colorFor(p.id)}">${initials(p.name)}</div>
+      <span class="name-flex" style="flex:1">${p.name}${p.id===myId ? ' (du)' : ''}</span>
+      ${deletePersonBtnHtml(p.id, 'who')}
+    </div>`).join('');
+}
+function closeWhoAmI(){
+  document.getElementById('whoOverlay').classList.remove('show');
+  document.getElementById('whoNewInput').value = '';
+}
+function setMe(id){
+  myId = id;
+  localStorage.setItem('schulweg-my-id', id);
+  updateMeChip();
+  closeWhoAmI();
+}
+async function addPersonAsMe(){
+  const input = document.getElementById('whoNewInput');
+  const err = document.getElementById('whoAddError');
+  const name = input.value.trim();
+  if (!name) return;
+  if (nameTaken(name)) { err.classList.add('show'); return; }
+  err.classList.remove('show');
+  const id = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+  await db.ref('people/'+id).set({name});
+  setMe(id);
+  input.value = '';
+}
+
+initData();
+</script>
+</body>
+</html>
