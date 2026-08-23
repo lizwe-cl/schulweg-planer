@@ -287,11 +287,24 @@ function toDateStr(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.
 function fromDateStr(s){ const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); }
 function todayStart(){ const t = new Date(); t.setHours(0,0,0,0); return t; }
 
-function colorFor(id){
+// Farbe kommt jetzt aus der Datenbank (p.color). Dieser Fallback greift nur,
+// solange eine Migration alter Einträge ohne Farbe noch nicht abgeschlossen ist.
+function colorFallback(id){
   let hash = 0;
   for (const ch of id) hash = (hash*31 + ch.charCodeAt(0)) % COLORS.length;
   return COLORS[Math.abs(hash) % COLORS.length];
 }
+function colorForPerson(p){ return (p && p.color) ? p.color : colorFallback(p ? p.id : ''); }
+
+// Wählt für eine neue Person eine Farbe, die noch niemand hat.
+// Erst aus der kuratierten Palette, danach automatisch generiert (goldener Winkel = gut unterscheidbare Farben).
+function nextColor(existingPeople){
+  const used = new Set(existingPeople.map(p => p.color).filter(Boolean));
+  for (const c of COLORS) if (!used.has(c)) return c;
+  const hue = (existingPeople.length * 137.508) % 360;
+  return `hsl(${hue.toFixed(0)}, 55%, 50%)`;
+}
+
 function initials(name){ return name.trim().split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
 function personById(id){ return people.find(p=>p.id===id); }
 function nameTaken(name, excludeId){
@@ -303,17 +316,35 @@ function nameTaken(name, excludeId){
 function initData(){
   db.ref('people').on('value', snap => {
     const val = snap.val() || {};
-    people = Object.keys(val).map(id => ({id, name: val[id].name}));
+    people = Object.keys(val).map(id => ({id, name: val[id].name, color: val[id].color || null}));
     if (myId && !personById(myId)) { myId = null; localStorage.removeItem('schulweg-my-id'); }
     render();
     if (document.getElementById('whoOverlay').classList.contains('show')) renderWhoList();
     if (document.getElementById('assignOverlay').classList.contains('show')) renderPersonList();
+    migrateMissingColors();
   });
   db.ref('plans').on('value', snap => {
     plans = snap.val() || {};
     render();
   });
   cleanupPastPlans();
+}
+
+let migrating = false;
+async function migrateMissingColors(){
+  if (migrating) return;
+  const missing = people.filter(p => !p.color);
+  if (missing.length === 0) return;
+  migrating = true;
+  try {
+    const assigned = people.filter(p => p.color);
+    for (const p of missing) {
+      const color = nextColor(assigned);
+      assigned.push({...p, color});
+      await db.ref('people/'+p.id+'/color').set(color);
+    }
+  } catch(e){ console.error('Farb-Migration fehlgeschlagen', e); }
+  migrating = false;
 }
 
 async function cleanupPastPlans(){
@@ -364,7 +395,7 @@ function slotButtonHtml(dateStr, slot){
     const person = personById(entry.personId);
     const icon = MODE_ICON[entry.mode] || '';
     return `<button class="assign-btn filled ${cls}" onclick="openAssign('${dateStr}','${slot}')">
-      <div class="avatar" style="background:${colorFor(person.id)}">${initials(person.name)}</div>
+      <div class="avatar" style="background:${colorForPerson(person)}">${initials(person.name)}</div>
       <span class="name-text">${person.name}</span>
       <span class="mode-icon">${icon}</span>
     </button>`;
@@ -417,7 +448,7 @@ function updateMeChip(){
   const label = document.getElementById('meLabel');
   const person = myId ? personById(myId) : null;
   if (person) {
-    avatar.style.background = colorFor(person.id);
+    avatar.style.background = colorForPerson(person);
     avatar.textContent = initials(person.name);
     label.textContent = person.name;
   } else {
@@ -442,7 +473,7 @@ function renderPersonList(){
   const list = document.getElementById('personList');
   list.innerHTML = people.map(p => `
     <div class="person-row">
-      <div class="avatar" style="background:${colorFor(p.id)}">${initials(p.name)}</div>
+      <div class="avatar" style="background:${colorForPerson(p)}">${initials(p.name)}</div>
       <span class="name-flex">${p.name}${p.id===myId ? ' (du)' : ''}</span>
       <button class="mode-btn" title="Zu Fuß" onclick="assignPerson('${p.id}','walk')">🚶</button>
       <button class="mode-btn" title="Auto" onclick="assignPerson('${p.id}','car')">🚗</button>
@@ -471,7 +502,7 @@ async function addPerson(){
   if (nameTaken(name)) { err.classList.add('show'); return; }
   err.classList.remove('show');
   const id = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
-  await db.ref('people/'+id).set({name});
+  await db.ref('people/'+id).set({name, color: nextColor(people)});
   input.value = '';
 }
 
@@ -523,7 +554,7 @@ function renderWhoList(){
   }
   list.innerHTML = people.map(p => `
     <div class="select-row" onclick="setMe('${p.id}')">
-      <div class="avatar" style="background:${colorFor(p.id)}">${initials(p.name)}</div>
+      <div class="avatar" style="background:${colorForPerson(p)}">${initials(p.name)}</div>
       <span class="name-flex" style="flex:1">${p.name}${p.id===myId ? ' (du)' : ''}</span>
       ${deletePersonBtnHtml(p.id, 'who')}
     </div>`).join('');
@@ -546,7 +577,7 @@ async function addPersonAsMe(){
   if (nameTaken(name)) { err.classList.add('show'); return; }
   err.classList.remove('show');
   const id = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
-  await db.ref('people/'+id).set({name});
+  await db.ref('people/'+id).set({name, color: nextColor(people)});
   setMe(id);
   input.value = '';
 }
