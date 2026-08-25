@@ -100,6 +100,20 @@
   .slot-label.pm { color: var(--afternoon); }
   .arc { width: 12px; height: 12px; flex-shrink: 0; }
 
+  .confirm-toggle {
+    margin-left: auto;
+    width: 18px; height: 18px; border-radius: 999px;
+    border: 1.5px solid var(--free-border);
+    background: var(--bg-card);
+    color: transparent;
+    font-size: 11px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0; padding: 0;
+  }
+  .confirm-toggle.on { background: #4C9A6B; border-color: #4C9A6B; color: white; }
+  .confirm-toggle:disabled { opacity: 0.3; cursor: default; }
+  .confirm-toggle:not(:disabled):active { transform: scale(0.9); }
+
   .assign-btn {
     width: 100%;
     display: flex; align-items: center; gap: 8px;
@@ -118,6 +132,7 @@
   .assign-btn .avatar { width: 22px; height: 22px; font-size: 10px; }
   .assign-btn.filled.am { border-color: var(--morning-soft); }
   .assign-btn.filled.pm { border-color: var(--afternoon-soft); }
+  .assign-btn.confirmed { background: #E4F3E9; border-color: #8FC7A3; }
   .assign-btn:active { transform: scale(0.98); }
   .mode-icon { font-size: 14px; margin-left: auto; }
   .assign-btn .name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -394,13 +409,24 @@ function slotButtonHtml(dateStr, slot){
   if (entry && entry.personId && personById(entry.personId)) {
     const person = personById(entry.personId);
     const icon = MODE_ICON[entry.mode] || '';
-    return `<button class="assign-btn filled ${cls}" onclick="openAssign('${dateStr}','${slot}')">
+    const confirmedCls = entry.confirmed ? 'confirmed' : '';
+    return `<button class="assign-btn filled ${cls} ${confirmedCls}" onclick="openAssign('${dateStr}','${slot}')">
       <div class="avatar" style="background:${colorForPerson(person)}">${initials(person.name)}</div>
       <span class="name-text">${person.name}</span>
       <span class="mode-icon">${icon}</span>
     </button>`;
   }
   return `<button class="assign-btn ${cls}" onclick="openAssign('${dateStr}','${slot}')">＋ Zuweisen</button>`;
+}
+
+function confirmToggleHtml(dateStr, slot){
+  const p = plans[dateStr] || {};
+  const entry = p[slot];
+  const hasPerson = !!(entry && entry.personId);
+  const on = !!(entry && entry.confirmed);
+  return `<button class="confirm-toggle ${on?'on':''}" ${hasPerson ? '' : 'disabled'}
+    title="${on ? 'Abgestimmt – antippen zum Zurücksetzen' : 'Als abgestimmt markieren'}"
+    onclick="event.stopPropagation(); toggleConfirmed('${dateStr}','${slot}')">✓</button>`;
 }
 
 function render(){
@@ -429,11 +455,11 @@ function render(){
       </div>
       <div class="slots">
         <div class="slot">
-          <div class="slot-label am">${arcSvg('#E8944F')} Morgens · Hinbringen</div>
+          <div class="slot-label am">${arcSvg('#E8944F')} Morgens · Hinbringen ${confirmToggleHtml(dateStr, 'morning')}</div>
           ${slotButtonHtml(dateStr, 'morning')}
         </div>
         <div class="slot">
-          <div class="slot-label pm">${arcSvg('#5A7DA3')} Nachmittags · Abholen</div>
+          <div class="slot-label pm">${arcSvg('#5A7DA3')} Nachmittags · Abholen ${confirmToggleHtml(dateStr, 'afternoon')}</div>
           ${slotButtonHtml(dateStr, 'afternoon')}
         </div>
       </div>
@@ -491,8 +517,14 @@ async function assignPerson(personId, mode){
   if (!personId) {
     await db.ref(`plans/${dateStr}/${slot}`).remove();
   } else {
-    await db.ref(`plans/${dateStr}/${slot}`).set({personId, mode});
+    await db.ref(`plans/${dateStr}/${slot}`).set({personId, mode, confirmed: false});
   }
+}
+
+async function toggleConfirmed(dateStr, slot){
+  const entry = (plans[dateStr] || {})[slot];
+  if (!entry || !entry.personId) return;
+  await db.ref(`plans/${dateStr}/${slot}/confirmed`).set(!entry.confirmed);
 }
 async function addPerson(){
   const input = document.getElementById('newPersonInput');
