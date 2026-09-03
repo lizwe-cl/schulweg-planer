@@ -137,6 +137,19 @@
   .mode-icon { font-size: 14px; margin-left: auto; }
   .assign-btn .name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+  .day-note { padding: 0 16px 12px; }
+  .note-input {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg);
+    padding: 7px 10px;
+    font-family: 'Inter', sans-serif;
+    font-size: 9px;
+    color: var(--ink);
+  }
+  .note-input::placeholder { color: var(--ink-soft); }
+
   /* Modal */
   .overlay {
     position: fixed; inset: 0; background: rgba(31,42,36,0.45);
@@ -463,6 +476,11 @@ function render(){
           ${slotButtonHtml(dateStr, 'afternoon')}
         </div>
       </div>
+      <div class="day-note">
+        <input type="text" class="note-input" placeholder="Notiz für diesen Tag (optional)"
+          value="${escapeHtml((plans[dateStr] || {}).note)}" maxlength="140"
+          onblur="saveNote('${dateStr}', this.value)">
+      </div>
     </div>`;
   }
   content.innerHTML = html;
@@ -612,6 +630,23 @@ async function addPersonAsMe(){
   await db.ref('people/'+id).set({name, color: nextColor(people)});
   setMe(id);
   input.value = '';
+}
+
+// Sie nimmt einen Textstring und ersetzt bestimmte Zeichen durch ihre HTML‑Entities, damit der Text sicher in HTML angezeigt werden kann.
+// Damit wird verhindert, dass ein Benutzertext HTML‑Tags erzeugt oder JavaScript einschleust.
+function escapeHtml(s){
+  return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Gespeichert wird beim Verlassen des Feldes (onblur), nicht bei jedem Tastendruck – schont die Datenbank-Aufrufe. 
+// Leere Notiz wird aus der Datenbank entfernt statt als leerer String gespeichert.
+async function saveNote(dateStr, value){
+  const text = value.trim();
+  if (text) {
+    await db.ref(`plans/${dateStr}/note`).set(text);
+  } else {
+    await db.ref(`plans/${dateStr}/note`).remove();
+  }
 }
 
 initData();
